@@ -111,7 +111,7 @@ namespace read_text
                         {
                             Console.WriteLine(line.Text);
                             string cleanedText = Regex.Replace(line.Text.ToUpper(), "[^A-Z0-9]", "");
-                            if (cleanedText != "TEXAS")
+                            if ((cleanedText != "TEXAS")&&(cleanedText.Length>=7))
                             {
                                 // return the first detected line as plate number
                                 return cleanedText;
@@ -172,16 +172,32 @@ namespace read_text
         private readonly CosmosClient _cosmosClient;
         private readonly Container _container;
 
+        private const string DatabaseId = "db82875";
+        private const string ContainerId = "registry";
+
         public VehicleRegistrationService(string endpointUri, string primaryKey)
         {
             _cosmosClient = new CosmosClient(endpointUri, primaryKey);
-            _container = _cosmosClient.GetContainer("db82875", "registry");
+            _container = InitializeAsync().GetAwaiter().GetResult();
+            AddSampleDataAsync();
+        }
+
+        private async Task<Container> InitializeAsync()
+        {
+            var dbResponse = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseId);
+            var database = dbResponse.Database;
+
+            var containerProperties = new ContainerProperties(ContainerId, "/plateNumber");
+            var containerResponse = await database.CreateContainerIfNotExistsAsync(containerProperties);
+         
+
+            return containerResponse.Container;
         }
 
         public async Task<VehicleRegistration> GetRegistrationByPlateNumberAsync(string plateNumber)
         {
             var query = new QueryDefinition("SELECT * FROM c WHERE c.plateNumber = @plateNumber")
-                            .WithParameter("@plateNumber", plateNumber);
+                .WithParameter("@plateNumber", plateNumber);
 
             using var iterator = _container.GetItemQueryIterator<VehicleRegistration>(query);
             while (iterator.HasMoreResults)
@@ -193,6 +209,67 @@ namespace read_text
             }
 
             return null;
+        }
+
+        public async Task AddSampleDataAsync()
+        {
+            var sampleData = new List<VehicleRegistration>
+        {
+            new VehicleRegistration
+            {
+                Id = "123456", PlateNumber = "TX12345", OwnerName = "John Doe", VehicleType = "Sedan",
+                Make = "Toyota", Model = "Camry", Year = 2020,
+                RegistrationDate = DateTime.Parse("2023-06-01"),
+                ExpirationDate = DateTime.Parse("2024-06-01"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-GKC4712", PlateNumber = "GKC4712", OwnerName = "John Martinez", VehicleType = "Sedan",
+                Make = "Toyota", Model = "Camry", Year = 2021,
+                RegistrationDate = DateTime.Parse("2023-01-15"),
+                ExpirationDate = DateTime.Parse("2024-01-15"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-DN54623", PlateNumber = "DN54623", OwnerName = "Alicia Clark", VehicleType = "Sedan",
+                Make = "BMW", Model = "43O1", Year = 2020,
+                RegistrationDate = DateTime.Parse("2023-03-10"),
+                ExpirationDate = DateTime.Parse("2024-03-10"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-TFP3125", PlateNumber = "TFP3125", OwnerName = "Miguel Thompson", VehicleType = "Truck",
+                Make = "Honda", Model = "CR-v", Year = 2018,
+                RegistrationDate = DateTime.Parse("2023-05-01"),
+                ExpirationDate = DateTime.Parse("2024-05-01"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-CF83192", PlateNumber = "CF83192", OwnerName = "Cynthia Lee", VehicleType = "Coupe",
+                Make = "Honda", Model = "Civic", Year = 2019,
+                RegistrationDate = DateTime.Parse("2022-12-20"),
+                ExpirationDate = DateTime.Parse("2023-12-20"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-297XQXT", PlateNumber = "297XQT", OwnerName = "David Brooks", VehicleType = "Hatchback",
+                Make = "Hyundai", Model = "Elantra GT", Year = 2020,
+                RegistrationDate = DateTime.Parse("2023-07-14"),
+                ExpirationDate = DateTime.Parse("2024-07-14"), State = "Texas"
+            },
+            new VehicleRegistration
+            {
+                Id = "TX-84JJ67", PlateNumber = "84JJ67", OwnerName = "Thomas Hill", VehicleType = "Sedan",
+                Make = "Chevrolet", Model = "Malibu", Year = 2018,
+                RegistrationDate = DateTime.Parse("2023-02-25"),
+                ExpirationDate = DateTime.Parse("2024-02-25"), State = "Texas"
+            }
+        };
+
+            foreach (var item in sampleData)
+            {
+                await _container.UpsertItemAsync(item, new PartitionKey(item.PlateNumber));
+            }
         }
     }
 
